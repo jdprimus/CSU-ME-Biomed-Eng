@@ -1,0 +1,197 @@
+---
+title: 'STAA575: Homework 2'
+author: "Jeremy Primus"
+date: "1/27/2018"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Metropolis-Hastings Algorithm
+```{r MH Algorithm}
+library(knitr)
+rm(list = ls())          # clear variables
+ 
+# initialize vectors for final table 
+acceptanceRate <- c(0,0,0)   
+target <- letters[1:3]
+proposal <- letters[1:3]
+theoreticalMean <- c(0,0,0)
+obsMean <- c(0,0,0)
+theoreticalStdDev <- c(0,0,0)
+obsStdDev <- c(0,0,0)
+
+for (ii in c(1,2,3)){           # loop to run for three sets of model parameters
+  # model parameters 
+  iter <- 10000                 # set number of iterations
+  a <- c(1, 1, 0.5)             # set parameters of the target distribution
+  b <- c(1, 10, 1)
+  x <- rep(0.5,iter)            # initialize a vector for target distribution
+  x[1] <- 0.1                   # draw first value from target
+  stdDev <- c(2, 0.2, 0.7)      # set standard deviation for proposal
+
+
+  #MHAlgorithm 
+  for(t in seq(1, iter, length=iter)){  
+    xstar <- rnorm(1, x[t], stdDev[ii])         # draw x* from proposal
+    mHRatio <- dgamma(xstar, a[ii], rate=b[ii])*dnorm(x[t], xstar, stdDev[ii])/(dgamma(x[t], a[ii],   rate=b[ii])*dnorm(xstar, x[t], stdDev[ii]))     # evaluate mHRatio
+    if (mHRatio >= 1){        # accept criteria 1        
+      x[t+1] <- xstar                    
+    } else {
+      u <- runif(1, 0, 1)     # Bernoulli draw
+      if (u < mHRatio){       # accept criteria 2
+        x[t+1] <- xstar       
+      } else {                # reject criteria
+          x[t+1] <-x[t]       
+      }
+    }
+  }
+  # generate plots
+  plot(x, type = 'n', main= paste("Sample Path a = ", a[ii], 'b = ', b[ii]))
+  lines(x)
+  
+  hist(x, col = "red", main = paste('MH Algorithm Output  a = ', a[ii], 'b = ', b[ii]))
+  xx <- seq(0, 5, length = 1000)
+  y <- (iter/2)*dgamma(xx, a[ii], rate = b[ii])
+  lines(xx,y)
+  legend("topright", legend=c("MCMC", "Theoretical"),
+       col=c("red", "black"), lty=2:1, lwd=c(10,1), cex=0.8)
+
+  # generate data for table
+  target[ii] <- paste("Gamma(", a[ii], ",", b[ii],")")
+  proposal[ii] <- paste("Normal(x[t]", ",", stdDev[ii],")")
+  acceptanceRate[ii] <- length(unique(x))/length(x)
+  theoreticalMean[ii] <- a[ii]/b[ii]
+  obsMean[ii] <- mean(x[(iter/2):iter])
+  theoreticalStdDev[ii] <- a[ii]/b[ii]^2
+  obsStdDev[ii] <- sqrt(var(x[(iter/2):iter]))
+}
+
+# create table
+df = data.frame(target, proposal, acceptanceRate, theoreticalMean, obsMean, theoreticalStdDev, obsStdDev)
+kable(df)
+
+# the above code should ideally be written as a function to allow the user to pass in values, and completely customize the algorithm.  However, I am new to R and have not written any functions yet.  I will apply this improvement if we continue developing our own algorithms for MCMC.
+```
+
+## C. Output with x* drawn from proposal with mean 0
+```{r MH Algorithm0, echo=FALSE}
+library(knitr)
+rm(list = ls())          # clear variables
+ 
+# initialize vectors for final table 
+acceptanceRate <- c(0,0,0)   
+target <- letters[1:3]
+proposal <- letters[1:3]
+theoreticalMean <- c(0,0,0)
+obsMean <- c(0,0,0)
+theoreticalStdDev <- c(0,0,0)
+obsStdDev <- c(0,0,0)
+
+for (ii in c(1,2,3)){           # loop to run for three sets of model parameters
+  # model parameters 
+  iter <- 10000                 # set number of iterations
+  a <- c(1, 1, 0.5)             # set parameters of the target distribution
+  b <- c(1, 10, 1)
+  x <- rep(0.5,iter)            # initialize a vector for target distribution
+  x[1] <- 0.1                   # draw first value from target
+  stdDev <- c(2, 0.2, 0.7)      # set standard deviation for proposal
+
+
+  #MHAlgorithm 
+  for(t in seq(1, iter, length=iter)){  
+    xstar <- rnorm(1, x[t], stdDev[ii])         # draw x* from proposal
+    mHRatio <- dgamma(xstar, a[ii], rate=b[ii])*dnorm(x[t], xstar, stdDev[ii])/(dgamma(x[t], a[ii], rate=b[ii])*dnorm(xstar, x[t], stdDev[ii]))     # evaluate mHRatio
+    if (mHRatio >= 1){        # accept criteria 1        
+      x[t+1] <- xstar                    
+    } else {
+      u <- runif(1, 0, 1)     # Bernoulli draw
+      if (u < mHRatio){       # accept criteria 2
+        x[t+1] <- xstar       
+      } else {                # reject criteria
+          x[t+1] <-x[t]       
+      }
+    }
+  }
+  # generate plots
+  plot(x, type = 'n', main= paste("Sample Path a = ", a[ii], 'b = ', b[ii]))
+  lines(x)
+  
+  hist(x, col = "red", main = paste('MH Algorithm Output  a = ', a[ii], 'b = ', b[ii]))
+  xx <- seq(0, 5, length = 1000)
+  y <- (iter/2)*dgamma(xx, a[ii], rate = b[ii])
+  lines(xx,y)
+  legend("topright", legend=c("MCMC", "Theoretical"),
+       col=c("red", "black"), lty=2:1, lwd=c(10,1), cex=0.8)
+
+  # generate data for table
+  target[ii] <- paste("Gamma(", a[ii], ",", b[ii],")")
+  proposal[ii] <- paste("Normal(0", ",", stdDev[ii],")")
+  acceptanceRate[ii] <- length(unique(x))/length(x)
+  theoreticalMean[ii] <- a[ii]/b[ii]
+  obsMean[ii] <- mean(x[(iter/2):iter])
+  theoreticalStdDev[ii] <- a[ii]/b[ii]^2
+  obsStdDev[ii] <- sqrt(var(x[(iter/2):iter]))
+}
+
+# create table
+df = data.frame(target, proposal, acceptanceRate, theoreticalMean, obsMean, theoreticalStdDev, obsStdDev)
+kable(df, 'markdown')
+
+# the above code should ideally be written as a function to allow the user to pass in values, and completely customize the algorithm.  However, I am new to R and have not written any functions yet.  I will apply this improvement if we continue developing our own algorithms for MCMC.
+```
+## D. Summary
+  The Metropolis Hastings algorithm performed especially well for the cases a=1, b=1.  The estimated values of the mean and standard deviation closely match the theoretical value, and the real distribution function overlays the historgram well.  In fact, for all target parameter sets and the original proposal sampled from an x[t] mean, the algorithm accurately estimated the mean.  However, for a=1, b=10, the histogram deviates somewhat significantly from the target density.  This error also materializes as a vastly overestimated standard deviation.  Likewise, a=0.5, b=1, significantly overestimated the standard deviation.  However, the histogram and target PDF are in better agreement.  
+    
+  When x* was sampled from a proposal having a mean of 0, results were similar or slightly worse.  The acceptance rate is lower, as expected, as the proposal might draw negative xstar values which will always be rejected in the target.  This proposal should be modified, as we know the target density is only defined greater than 1, so draws should be centered to the right of the y-axis. 
+
+## 2. Gibbs Sampler
+```{r Gibbs Sampler}
+rm(list=ls())           # clear variables
+library(coda)
+
+# data collection
+tis <- c(94.50, 15.70, 62.90, 126.0, 5.20, 31.40, 1.05, 1.05, 2.10, 10.50)     # durations of data collection
+xis <- c(5, 1, 5, 14, 3, 19, 1, 1, 4, 22)     # number of failures
+k <- length(xis)                              # number of parameters in the model (ie pumps)
+
+# model parameters
+alpha <- 1
+c <- 1
+d <- 1
+
+iter <- 20000     # number of iterations 
+
+# create iterable variables and initialize first values
+b <- matrix(1,iter,1)
+b[1] <- 2                                    # starting value of beta
+theta <- matrix(1,iter,k)
+theta[1,] <- xis/tis                         # data: failure rates 
+predictedMean <- rep(0,k) 
+compliant <- letters[1:k]
+
+# Gibbs loop
+for(t in seq(2, iter, length=iter)){
+  b[t] <- rgamma(1, k*alpha+c, rate = sum(theta[t,])+d)
+  for(i in seq(1, k, length=k)){
+    theta[t,i] <-rgamma(1, xis[i]+alpha, rate = tis[i]+b[t])
+  }
+}
+
+# identify 95% confidence interval
+credibleIntervals <- HPDinterval(mcmc(theta), prob = 0.95)
+
+# figure generation
+for(j in seq(1, k, length=k)){
+  hist(theta[,j], main = paste('Pump ', j, ' Histogram'))
+  predictedMean[j] <- mean(theta[,j])
+  if (credibleIntervals[j,2] > 1){      # compliance criteria
+    compliant[j] <- "no"}
+  else {compliant[j] <- "yes"}
+}
+
+# construct and present table
+df = data.frame(predictedMean, credibleIntervals, compliant)
+kable(df, 'markdown')
+
+```

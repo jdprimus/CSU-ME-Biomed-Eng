@@ -1,0 +1,77 @@
+---
+title: "MECH502_HW4_4"
+author: "Jeremy Primus"
+date: "September 12, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())           # clear variables
+# Load the packages into R
+library(knitr)
+library(DEoptim)
+```
+# Intialization
+```{r data input}
+sigma = c(0, 141, 202, 252, 290, 319, 343, 360, 373, 390)
+epsilon = c(0.00, 0.087, 0.172, 0.259, 0.339, 0.413, 0.482, 0.547, 0.608, 0.770)
+plot(epsilon, sigma)
+```
+
+# Model selection
+
+ Initial model selection:   
+ Holloman
+ 
+ Justification:   
+   simplest model to fit (least parameters)        
+                curve starts at the origin
+
+# Model fitting
+```{r fitting}
+minFcn <- function(fitVars) {
+  f <- sum((sigma - fitVars[1]*epsilon^fitVars[2])^2);
+  return(f)
+}
+lower <- c(0,0)
+upper <- c(1000,10)
+set.seed(1234)                                  # set seed for reproducibility 
+invisible(outDEoptim <- DEoptim(minFcn, lower, upper, DEoptim.control(itermax = 500, trace = FALSE)))     # run fit
+summary(outDEoptim)
+paramFits <- outDEoptim$optim$bestmem
+
+# assign fit parameters
+k <- paramFits[1] 
+n <- paramFits[2]  
+
+# identify where necking occurs
+# necking criterion epsilon_t = n
+sigma_neck = k*n^n
+
+#plot(epsilon, 500*epsilon^0.5)
+plot(epsilon, sigma, main = "True Stress-Strain") # plot true data
+x <- seq(0, 0.8, by = 0.01)
+lines(x, k*x^n)            # plot the fit
+abline(v = n, col = "red") # mark where necking begins
+```
+ 
+  **Table 1.** Values of important parameters
+```{r table of results, echo=FALSE}
+df <- data.frame(format(c(k, n, sigma_neck), digits = 2), row.names = c("k", "n", "sigma_neck"))  # create a table
+colnames(df) <- c("best fit value")
+kable(df)
+```
+  
+# Engineering stress-strain
+
+```{r engineering stress-strain}
+epsilon_e <- exp(epsilon)-1 # from 3.13
+Ao_A <- exp(epsilon)        # from 3.25
+sigma_e <- sigma*(1/Ao_A)   # from 3.14
+plot(epsilon_e, sigma_e, main = "Engineering Stress-Strain")
+
+```
+
+# Discussion
+  In the tradtional engineering stress-strain curve, the UTS defines an inflection point past which the material begins to neck and the strain is not uniform.  Since the strain is no longer hardening at a rate greater than geometric softening, we see a negative slope.  In the true stress-strain case, since the material is still hardening, the slope remains positive, although the slope may decrease, it will remain positive to failure.

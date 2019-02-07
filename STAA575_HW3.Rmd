@@ -1,0 +1,197 @@
+---
+title: "STAA575_HW3"
+author: "Jeremy Primus"
+date: "2/4/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Code and Results from homework 2
+```{r Gibbs Sampler HW2, echo = FALSE}
+rm(list=ls())           # clear variables
+library(knitr)
+library(coda)
+library(mcmcplots)
+
+# data collection
+tis <- c(94.50, 15.70, 62.90, 126.0, 5.20, 31.40, 1.05, 1.05, 2.10, 10.50)     # durations of data collection
+xis <- c(5, 1, 5, 14, 3, 19, 1, 1, 4, 22)     # number of failures
+k <- length(xis)                              # number of parameters in the model (ie pumps)
+
+# model parameters
+alpha <- 1
+c <- 1
+d <- 1
+
+iter <- 20000     # number of iterations 
+
+# create iterable variables and initialize first values
+b <- matrix(1,iter,1)
+b[1] <- 2                                    # starting value of beta
+theta <- matrix(1,iter,k)
+theta[1,] <- xis/tis                         # data: failure rates 
+predictedMean <- rep(0,k) 
+compliant <- letters[1:k]
+
+# Gibbs loop
+for(t in seq(2, iter, length=iter)){
+  b[t] <- rgamma(1, k*alpha+c, rate = sum(theta[t,])+d)
+  for(i in seq(1, k, length=k)){
+    theta[t,i] <-rgamma(1, xis[i]+alpha, rate = tis[i]+b[t])
+  }
+}
+
+# identify 95% confidence interval
+credibleIntervals <- HPDinterval(mcmc(theta), prob = 0.95)
+
+# figure generation
+for(j in seq(1, k, length=k)){
+#  hist(theta[,j], main = paste('Pump ', j, ' Histogram'))
+  predictedMean[j] <- mean(theta[,j])
+  if (credibleIntervals[j,2] > 1){      # compliance criteria
+    compliant[j] <- "no"}
+  else {compliant[j] <- "yes"}
+}
+```
+```{r summary table HW2, echo=FALSE}
+# construct and present table
+df = data.frame(predictedMean, credibleIntervals, compliant)
+kable(df, 'markdown')
+
+params <- matrix(c(rep(alpha, length(b)), b), nrow = length(b))
+paramMeans <- rep(0,2)
+paramMeans[1] <- alpha
+paramMeans[2] <- mean(b)
+
+paramCIIntervals <- HPDinterval(mcmc(params), prob = 0.95)
+parametersdf = data.frame(paramMeans, paramCIIntervals, row.names = c("alpha", "beta"))
+kable(parametersdf, 'markdown')
+
+```
+## Metropolis-within-Gibbs Sampler
+```{r intialization}
+rm(list=ls())           # clear variables
+library(knitr)
+library(coda)
+library(mcmcplots)
+
+# data collection
+tis <- c(94.50, 15.70, 62.90, 126.0, 5.20, 31.40, 1.05, 1.05, 2.10, 10.50)     # durations of data collection
+xis <- c(5, 1, 5, 14, 3, 19, 1, 1, 4, 22)     # number of failures
+k <- length(xis)                              # number of parameters in the model (ie pumps)
+
+# model parameters
+c <- 1
+d <- 1
+mu <- 1
+
+iter <- 10000     # number of iterations 
+
+# create iterable variables and initialize starting values
+alpha <- matrix(1,iter,1)
+alpha[1] <- 1
+beta <- matrix(1,iter,1)
+beta[1] <- 1                                    # starting value of beta
+theta <- matrix(1,iter,k)
+theta[1,] <- xis/tis                            # data: failure rates 
+predictedMean <- rep(0,k) 
+compliant <- letters[1:k]
+
+# initialize vectors for final table 
+rownames <- letters[1:k]
+paramMeans <-rep(0,2)
+```
+```{r Gibbs-MH algorithm}
+# Gibbs-MH loop
+for(t in seq(2, iter, length=iter)){
+  # Metropolis-Hastings step for alpha (random walk)
+  alphastar <- rexp(1, rate = 1/alpha[t-1])   # draw from proposal
+  mHRatio <- (prod(theta[t-1,]^(alphastar-1))*beta[t-1]^(k*alphastar)*exp(-mu*alphastar)/gamma(alphastar))*dexp(alpha[t-1], rate = 1/alphastar)/(prod(theta[t-1,]^(alpha[t-1]-1))*beta[t-1]^(k*alpha[t-1])*exp(-mu*alpha[t-1])/gamma(alpha[t-1])*dexp(alphastar, rate = 1/alpha[t-1]))
+  
+  if (mHRatio >= 1){        # accept criteria 1        
+      alpha[t] <- alphastar                    
+    } else {
+      u <- runif(1, 0, 1)     # Bernoulli draw
+      if (u < mHRatio){       # accept criteria 2
+        alpha[t] <- alphastar       
+      } else {                # reject criteria
+          alpha[t] <-alpha[t-1]       
+      }}
+      
+  # Gibbs sampling
+  beta[t] <- rgamma(1, k*alpha+c, rate = sum(theta[t,])+d) # conditional distribution for beta
+  for(i in seq(1, k, length=k)){                           # conditional distribution for thetas
+    theta[t,i] <-rgamma(1, xis[i]+alpha, rate = tis[i]+beta[t])
+  }
+}
+```
+```{r create plots and diagnostics}
+# remove burn-in from results
+theta <- theta[5001:10000,] 
+alpha <- alpha[5001:10000,] 
+beta <- beta[5001:10000,] 
+
+# identify 95% confidence interval
+credibleIntervals <- HPDinterval(mcmc(theta), prob = 0.95)
+
+# histogram plots of theta distributions
+for(j in seq(1, k, length=k)){
+# doesn't request histogram  hist(theta[,j], main = paste('Pump ', j, ' Histogram'), xlab = paste('Theta ', j))
+  predictedMean[j] <- mean(theta[,j])
+  rownames[j] = paste('Pump', j)
+  if (credibleIntervals[j,2] > 1){      # compliance criteria
+    compliant[j] <- "no"}
+  else {compliant[j] <- "yes"}
+}
+```
+```{r final summary tables}
+# construct and present table
+thetadf = data.frame(predictedMean, credibleIntervals, compliant, row.names = rownames)
+colnames(thetadf) <- c("Predicted Mean", "Lower Bound 95% CI", "Upper Bound 95% CI", "Compliant?")
+kable(thetadf, 'markdown')
+
+params <- matrix(c(alpha, beta), nrow = length(alpha))
+paramMeans[1] <- mean(alpha)
+paramMeans[2] <- mean(beta)
+
+paramCIIntervals <- HPDinterval(mcmc(params), prob = 0.95)
+parametersdf = data.frame(paramMeans, paramCIIntervals, row.names = c("alpha", "beta"))
+kable(parametersdf, 'markdown')
+
+```
+## 2. Summary/Comparison
+Implementing a prior onto alpha made the algorithm more complicated, and possibly more accurate, however, it did not change inferences made about pump compliance  
+
+## 3. Caterplots
+
+
+```{r caterplots}
+# create a caterplot for the thetas
+caterplot(theta)
+abline(v=1)
+title(main="Caterpillar plot of posterior distribution\n of pump failure rates",
+xlab="# failures per 1000 hours",ylab="pump")
+```
+  
+## 4. Sample Path and ACF
+
+```{r sample path and acf}
+# generate sample path plots
+plot(theta[,1], type = 'n', main= "Sample Path: Theta 1")
+lines(theta[,1])
+acf(theta[,1])
+plot(theta[,9], type = 'n', main= "Sample Path: Theta 9")
+lines(theta[,9])
+acf(theta[,9])
+plot(alpha, type = 'n', main= "Sample Path: Alpha")
+lines(alpha)
+acf(alpha)
+plot(beta, type = 'n', main= "Sample Path: Beta")
+lines(beta)
+acf(beta)
+```
+  
+## Diagnostics Assessment  
+The sample paths and ACFs do not show any rd flags indicating any major issues with the algorithm.  Sample paths show the parameter space is well explored, and the ACFs die off quickly.  There seems to be a slight oscillation visible in the theta values, but it is extremely small and I would assume that is just a negligible side effect of the algorithm.  It might explore the parameter space moving in one direction until it gets too far away, and then back the other way, and so on.  
