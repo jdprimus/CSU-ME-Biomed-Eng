@@ -1,0 +1,177 @@
+---
+title: "STAA575_HW5"
+author: "Jeremy Primus"
+date: "2/18/2018"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())                         # clear the workspace
+knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_chunk$set(cache=TRUE)      # only re-executes code chunk when it is changed
+library(rjags)
+library(coda)
+library(ggplot2)
+library(dplyr)
+library(knitr)
+```
+## Model Definition
+```{r,message=FALSE,warning=FALSE}
+modelString = "
+model {
+    # Sampling distribution
+    for(i in 1:n)
+    {
+    	salary[i] ~ dnorm(mu[i], tau)  
+    	mu[i] <- inprod(beta[], X[i,])
+    }
+    
+    # Prior distributions: 
+    for(j in 1:5){ beta[j] ~ dnorm(beta.mu[j], 0.0001) }
+    tau ~ dgamma(1, 250000)
+}
+"
+model.txt<-textConnection(modelString)
+```
+## Import, Clean, Explore Data
+```{r, message=FALSE, warning = FALSE}
+# Make sure directory is set correctly
+bank <- read.table("BankSalaryData.csv", 
+	header = TRUE, sep = ",")
+# print(bank)
+
+bankbySex <- bank %>% group_by(Sex) %>% summarise_all(funs(mean)) %>% mutate(Sex = ifelse(Sex > 0, "Male", "Female"))
+
+# bar plot
+ggplot(data=bankbySex, aes(x = Sex, y = Educ)) +
+geom_bar(aes(fill = Sex), stat="identity", position=position_dodge())
+
+ggplot(data=bankbySex, aes(x = Sex, y = Exper)) +
+geom_bar(aes(fill = Sex), stat="identity", position=position_dodge())
+
+ggplot(data=bankbySex, aes(x = Sex, y = BegSal)) +
+geom_bar(aes(fill = Sex), stat="identity", position=position_dodge())
+
+```
+  
+## Conclusions
+From an initial exploration of the data, it appears that men are paid more than women at this bank.  The beginning salary for a male is higher than the average for a female.  However, the men on average also have more education and experience, so further analysis must be conducted to determine if there are discrepancies in pay between women and men with the same qualifications.
+
+## Linear Model Statement  
+```{r}
+# initialize parameters
+salary <- bank$BegSal
+x1 <- bank$Sex
+x2 <- bank$Educ
+x3 <- bank$Exper
+x4 <- bank$Time
+n <- length(salary)
+X <- cbind(1, x1, x2, x3, x4)
+
+# linear regression 
+beta.mu <- lm(salary ~ x1 + x2 + x3 + x4)$coef  # what does this line of code do?
+vanilla.reg=lm(salary ~ Sex + Educ + Exper + Time,data=bank)
+```
+## Linear Model Diagnostics
+```{r}
+# Investigate the residuals for the basic model
+plot(vanilla.reg)
+```
+    
+##Compile the model
+```{r, message=FALSE, warning = FALSE}
+dataList = list(salary = salary, X = X, n = n, beta.mu = beta.mu)     # combining the data for JAGS
+monitor = c("beta", "tau")	                                          # The parameter(s) to be monitored.
+nChains = 3         		                                              # Number of chains to run.
+nIter = 10000				                                                  # Steps to save per chain.  
+
+# Create, initialize, and adapt the model, burnin, and save steps from MCMC chain:
+jagsModel = jags.model(model.txt, data = dataList, n.chains = nChains, quiet = TRUE)
+codaSamples = coda.samples(jagsModel, var = monitor, n.iter = nIter)
+
+#Create a table of the results
+#Compute mean, sd, and 95% HPD interval:
+means=apply(codaSamples[[1]][2001:10000,],2,mean)
+sds=apply(codaSamples[[1]][2001:10000,],2,sd)
+hpds=HPDinterval(mcmc(codaSamples[[1]][2001:10000,]))
+meds=apply(codaSamples[[1]][2001:10000,],2,median)
+df <- data.frame(means, meds, hpds,  sds, row.names = c("Beta[1]", "Beta[2]", "Beta[3]", "Beta[4]", "Beta[5]", "Sigma"))
+df[6,] = 1/sqrt(df[6,])
+
+colnames(df) <- c("Mean", "Median", "Lower 95% CI", "Upper 95% CI", "Standard Deviation")
+kable(round(df,2))
+```
+  
+## MCMC Model Diagnostics
+```{r}
+#Quick examination of the output:  are the results sensible?
+#head(codaSamples)
+
+#Examine the summary output 
+burn.in <- 2001
+#Examining one chain
+summary(window(codaSamples[[1]],start=burn.in))
+    
+# Some convergence diagnostics
+par(mar=c(2.0,2,1.5,2))
+plot(window(codaSamples[[1]],start=burn.in))  # plot sample path and density
+    
+# Auto-correlation function
+k <- 6  # number of parameters
+paramNames = c(names(vanilla.reg$coefficients), "sigma")
+par(mar=rep(4,4))
+for (i in seq(1,k)){
+  acf(codaSamples[[1]][,i], main =paste0(paramNames[i], " plot"))
+}
+    
+# Caculate GR Statistic
+par(mar=c(2.0,2,1.5,2))
+gelman.diag(codaSamples)
+gelman.plot(codaSamples)
+  
+```
+MCMC Diagnostics indicate no obvious issues with convergance or correlation.
+
+## Compare predictions for future employees
+
+```{r, warning=FALSE}
+monitorNew = c("salary")	 # The parameter(s) to be monitored.
+nChains = 3         		   # Number of chains to run.
+nIter = 10000				#Steps to save per chain.  
+salary[94:95] <- NA
+x1[94:95] <- c(0,1)
+x2[94:95] <- c(12,12)
+x3[94:95] <- c(100,100)
+x4[94:95] <- c(16,16)
+n <- length(salary)
+X <- cbind(1, x1, x2, x3, x4)
+model.txt<-textConnection(modelString)
+burn.in <- 2001
+
+beta.mu.New <- lm(salary ~ x1 + x2 + x3 + x4)$coef  # what does this line of code do?
+dataList.New = list(salary = salary, X = X, n = n, beta.mu = beta.mu.New)
+
+jagsModelNew = jags.model(model.txt, data = dataList.New, n.chains = nChains, quiet = TRUE)
+codaSamplesNew = coda.samples(jagsModelNew, var = monitorNew, n.iter = nIter)
+summary(window(codaSamplesNew[[1]][,94:95],start=burn.in))
+plot(window(codaSamplesNew[[1]][,94],start=burn.in), main = "New Employee Salary Prediction", trace = FALSE, col = "red" )
+legend("topleft", legend=c("Female", "Male"),
+       col=c("red", "blue"), lty=1:2, cex=0.8)
+lines(density(window(codaSamplesNew[[1]][,95],start=burn.in)), lty = 2, col = "blue")
+
+
+
+TFFemale = window(codaSamplesNew[[1]][,94],start=burn.in) > 5800
+femaleProb = length(which(TFFemale =="TRUE" ))/length(TFFemale)
+
+TFMale = window(codaSamplesNew[[1]][,95],start=burn.in) > 5800
+maleProb = length(which(TFMale =="TRUE" ))/length(TFMale)
+
+print(femaleProb)
+print(maleProb)
+```
+## Conclusions
+     The data suggests a significant difference between the pay for men and women.  First, the coefficient attached to the 'sex' data is actually the most heavily weighted coefficient.  Secondly future predictions of the model based upon the same qualifications for men and women indicate that men are likely to be paid higher for the same work.  

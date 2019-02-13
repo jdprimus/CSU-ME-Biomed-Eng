@@ -1,0 +1,156 @@
+---
+title: "STAA575_HW4-Parent"
+author: "Jeremy Primus"
+date: "2/11/2018"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())          # clear variables
+library(knitr)
+```
+## Model Statement
+```{r model definition}
+# Model 1: original
+model1.seeds.text="model {
+   for (i in 1:N) {
+      b[i]         ~ dnorm(0.0,tau)
+      logit(p[i]) <- alpha0 + alpha1*x1[i] + alpha2*x2[i] +
+                     alpha12*x1[i]*x2[i] + b[i]
+      r[i]         ~ dbin(p[i],n[i])
+   }
+   alpha0  ~ dnorm(0.0,1.0E-6)  # intercept
+   alpha1  ~ dnorm(0.0,1.0E-6)  # seed coeff
+   alpha2  ~ dnorm(0.0,1.0E-6)  # extract coeff
+   alpha12 ~ dnorm(0.0,1.0E-6)
+   tau     ~ dgamma(1.0E-3,1.0E-3)    # 1/sigma^2
+   sigma  <- 1.0/sqrt(tau)
+
+}"
+
+# Model 2: no interaction effect
+model2.seeds.text="model {
+   for (i in 1:N) {
+      b[i]         ~ dnorm(0.0,tau)
+      logit(p[i]) <- alpha0 + alpha1*x1[i] + alpha2*x2[i] + b[i]
+      r[i]         ~ dbin(p[i],n[i])
+   }
+   alpha0  ~ dnorm(0.0,1.0E-6)  # intercept
+   alpha1  ~ dnorm(0.0,1.0E-6)  # seed coeff
+   alpha2  ~ dnorm(0.0,1.0E-6)  # extract coeff
+   tau     ~ dgamma(1.0E-3,1.0E-3)    # 1/sigma^2
+   sigma  <- 1.0/sqrt(tau)
+
+}"
+
+# Model 3: No root effect no interaction
+model3.seeds.text="model {
+   for (i in 1:N) {
+      b[i]         ~ dnorm(0.0,tau)
+      logit(p[i]) <- alpha0 + alpha1*x1[i] + b[i]
+      r[i]         ~ dbin(p[i],n[i])
+   }
+   alpha0  ~ dnorm(0.0,1.0E-6)  # intercept
+   alpha1  ~ dnorm(0.0,1.0E-6)  # seed coeff
+   tau     ~ dgamma(1.0E-3,1.0E-3)    # 1/sigma^2
+   sigma  <- 1.0/sqrt(tau)
+
+}"
+
+# Model 4: no random effect
+model4.seeds.text="model {
+   for (i in 1:N) {
+      logit(p[i]) <- alpha0 + alpha1*x1[i] + alpha2*x2[i] +
+                     alpha12*x1[i]*x2[i]
+      r[i]         ~ dbin(p[i],n[i])
+   }
+   alpha0  ~ dnorm(0.0,1.0E-6)  # intercept
+   alpha1  ~ dnorm(0.0,1.0E-6)  # seed coeff
+   alpha2  ~ dnorm(0.0,1.0E-6)  # extract coeff
+   alpha12 ~ dnorm(0.0,1.0E-6)
+   tau     ~ dgamma(1.0E-3,1.0E-3)    # 1/sigma^2
+   sigma  <- 1.0/sqrt(tau)
+
+}"
+
+model.seeds.list <- list(model1.seeds.text, model2.seeds.text, model3.seeds.text, model4.seeds.text)
+
+# Model parameters
+model.1.param <- c("alpha0", "alpha1","alpha2","alpha12","sigma")
+model.2.param <- c("alpha0", "alpha1","alpha2","sigma")
+model.3.param <- c("alpha0", "alpha1","sigma")
+model.4.param <- c("alpha0", "alpha1","alpha2","alpha12")
+model.params.list <- list(model.1.param, model.2.param, model.3.param, model.4.param)
+
+```
+## Data input
+```{r data input}
+#Data
+  N <- 21
+  r <-c(10, 23, 23, 26, 17, 5, 53, 55, 32, 46, 10, 8, 10, 8, 23, 0,  3, 22, 15, 32, 3)
+  n <-c(39, 62, 81, 51, 39, 6, 74, 72, 51, 79, 13, 16, 30, 28, 45, 4, 12, 41, 30, 51, 7)
+  x1 <-c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)  # group 75 (0) or group 73 (1)
+  x2 <-c(0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1)  # bean (0) or cucumber (1)
+  seeds.data=list(N=N,r=r,n=n,x1=x1,x2=x2)
+```
+## Initial Values
+```{r initial values}
+#Initial Values:
+#A diverse set of values for the GR statistic
+# model 1 initse
+inits1=list(
+  list(tau =1,alpha0=0,alpha1=10,alpha2=-10,alpha12=5),
+  list(tau =5,alpha0=5,alpha1=0,alpha2=-5,alpha12=10),
+  list(tau =.1,alpha0=10,alpha1=5,alpha2=0,alpha12=-10))
+# model 2 inits
+inits2=list(
+  list(tau =1,alpha0=0,alpha1=10,alpha2=-10),
+  list(tau =5,alpha0=5,alpha1=0,alpha2=-5),
+  list(tau =.1,alpha0=10,alpha1=5,alpha2=0))
+# model 3 inits
+inits3=list(
+  list(tau =1,alpha0=0,alpha1=10),
+  list(tau =5,alpha0=5,alpha1=0),
+  list(tau =.1,alpha0=10,alpha1=5))
+# model 4 inits
+inits4=list(
+  list(tau =1,alpha0=0,alpha1=10,alpha2=-10,alpha12=5),
+  list(tau =5,alpha0=5,alpha1=0,alpha2=-5,alpha12=10),
+  list(tau =.1,alpha0=10,alpha1=5,alpha2=0,alpha12=-10))
+
+initslist <- list(inits1, inits2, inits3, inits4)
+```
+## Calls to model
+```{r evaluate model performance, message= FALSE, warning= FALSE}
+source("runEvaluateModels.R")
+noOfModels <- length(model.seeds.list)
+DIC <- list() 
+plotstf = FALSE
+for (ii in seq(1, noOfModels)){
+  DIC[[ii]] <- runEvaluateModels(model.seeds.list[[ii]], model.params.list[[ii]], initslist[[ii]], seeds.data, plotstf)
+  print(paste0("Model", ii))
+  print(DIC[[ii]])
+}
+```
+## Create a table of DICs
+
+```{r create table }
+modelMeanDICs <- c(102.4, 102.3, 99.45, 113.8)
+modelPenalty <- c(10.99, 11.77, 16.01, 3.935)
+modelPenDev <- c(113.4, 114.1, 115.5, 117.8)
+df <- data.frame(modelMeanDICs, modelPenalty, modelPenDev, row.names = c("Model 1", "Model 2", "Model 3", "Model 4"))
+colnames(df) <- c("DIC", "Effective No. of Parameters", "Penalized DIC")
+kable(df)
+```
+  
+## Interpret Results
+     Model 1 has the second lowest DIC, and after assessing a penalty for the effective number of parameters, Model 1 has the lowest DIC.  Based upon this information, Model 1 will be selected for deeper analysis.  
+```{r re run model 1}
+plotstf = TRUE
+runEvaluateModels(model.seeds.list[[1]], model.params.list[[1]], initslist[[1]], seeds.data, plotstf)
+```
+## Analysis (b-d)
+The sample path and ACF plots indicated no obvious convergence issues with Model 1.  The posterior density suggests germination rates range from 33-55%, with a most probable germination rate of about 44%.  
